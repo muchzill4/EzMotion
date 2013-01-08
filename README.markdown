@@ -11,8 +11,8 @@ Since I'm not a big fan of plugins providing default bindings if it's not necess
 
 Please add following to your user keymap:
 
-    { "keys": [<keys here>], "command": "easy_motion", "args": {"forward": true } },
-    { "keys": [<keys here>], "command": "easy_motion" }
+    { "keys": [<keys here>], "command": "ez_motion", "args": {"forward": true } },
+    { "keys": [<keys here>], "command": "ez_motion" }
 
 Info
 ====
