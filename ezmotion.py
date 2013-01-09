@@ -5,7 +5,7 @@ class EzMotionCommand(sublime_plugin.TextCommand):
 
 	tags = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-	def run(self, edit, forward = False):
+	def run(self, edit, forward = False, line = False):
 
 		self.targets = [];
 		self.faded = [];
@@ -13,6 +13,7 @@ class EzMotionCommand(sublime_plugin.TextCommand):
 		self.in_word = False
 
 		self.forward = forward
+		self.line = line
 
 		self.edit = edit
 		self.window = self.view.window()
@@ -34,12 +35,10 @@ class EzMotionCommand(sublime_plugin.TextCommand):
 
 		self.unmark_targets()
 
-		# If we are in word and moving back, we have to do one more jump ;)
-		if not self.forward and self.in_word:
-			self.view.run_command("move", { "extend": self.in_selection, "word_begin": True, "punct_begin": False, "forward": self.forward, "by": "stops" })
-
-		for k in range(0, i + 1):
-			self.view.run_command("move", { "extend": self.in_selection, "word_begin": True, "punct_begin": False, "forward": self.forward, "by": "stops" })
+		edit = self.view.begin_edit()
+		self.view.sel().clear()
+		self.view.sel().add(sublime.Region(self.bookmarked[i].a, self.bookmarked[i].a))
+		self.view.end_edit(edit)
 
 		if ((i == len(self.tags) - 1) and (len(self.targets))):
 			self.view.run_command("ez_motion", { "forward": self.forward })
@@ -83,7 +82,7 @@ class EzMotionCommand(sublime_plugin.TextCommand):
 
 		text = self.text_fragment()
 
-		for match in re.finditer(r'\w+', text, re.UNICODE):
+		for match in re.finditer(r'\w+', text):
 			r_start = match.start() + self.start
 			r_end = match.end() + self.start
 			self.targets.append(sublime.Region(r_start, r_start+1))
