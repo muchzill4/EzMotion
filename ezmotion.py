@@ -2,92 +2,131 @@ import sublime, sublime_plugin
 import re
 
 class EzMotionCommand(sublime_plugin.TextCommand):
-    def run(self, edit, forward = False):
-        self.forward = forward
-        self.edit = edit
-        self.window = self.view.window()
-        self.tags = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        self.targets = self.find_targets()
-        self.make_bookmarks()
-        self.mark_targets()
-        self.window.show_input_panel("EzMotion:", "", self.jump_to_target, None, self.unmark_targets)
 
-    def jump_to_target(self, target):
-        try:
-            i = self.tags.index(target)
-        except ValueError:
-            self.unmark_targets()
-            return
+	tags = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-        self.unmark_targets()
+	def run(self, edit, forward = False):
 
-        for k in range(0, i + 1):
-            self.view.run_command("move", { "extend": False, "word_begin": True, "punct_begin": False, "forward": self.forward, "by": "stops" })
+		self.targets = [];
+		self.faded = [];
+		self.in_selection = False
+		self.in_word = False
 
-        if ((i == len(self.tags) - 1) and (len(self.targets))):
-            self.view.run_command("ez_motion", { "forward": self.forward })
+		self.forward = forward
 
-    def make_bookmarks(self):
-        self.bookmarked = []
-        print self.targets
-        for i in range(0, len(self.targets)):
-            if (i <= len(self.tags) - 1):
-                self.bookmarked.append(self.targets.pop(0))
+		self.edit = edit
+		self.window = self.view.window()
 
-    def mark_targets(self):
-        for i, r in enumerate(self.bookmarked):
-            self.view.replace(self.edit, r, self.tags[i])
+		self.find_targets()
+		self.make_bookmarks()
+		self.mark_targets()
+		self.window.show_input_panel("EzMotion:", "", self.jump_to_target, None, self.unmark_targets)
 
-        print self.targets
-        for r in (self.targets):
-            self.view.replace(self.edit, r, self.tags[-1])
 
-        self.view.add_regions('ez_motion', self.bookmarked + self.targets, 'comment')
+	def jump_to_target(self, target):
+		"""	Gets called after successful user input @ input panel """
 
-    def unmark_targets(self):
-        """ Remove target marks """
-        self.view.erase_regions('ez_motion')
-        self.view.end_edit(self.edit)
-        self.window.run_command("undo")
+		try:
+			i = self.tags.index(target)
+		except ValueError:
+			self.unmark_targets()
+			return
 
-    def find_targets(self):
-        """ Find all possible motion targets and return them as a list of sublime.Region objects """
+		self.unmark_targets()
 
-        self.start, self.end = self.get_start_end()
+		# If we are in word and moving back, we have to do one more jump ;)
+		if not self.forward and self.in_word:
+			self.view.run_command("move", { "extend": self.in_selection, "word_begin": True, "punct_begin": False, "forward": self.forward, "by": "stops" })
 
-        text = self.text_fragment()
-        matching_regions = []
+		for k in range(0, i + 1):
+			self.view.run_command("move", { "extend": self.in_selection, "word_begin": True, "punct_begin": False, "forward": self.forward, "by": "stops" })
 
-        for match in re.finditer(r'\w+', text):
-            pt = match.start() + self.start
-            matching_regions.append(sublime.Region(pt, pt+1))
+		if ((i == len(self.tags) - 1) and (len(self.targets))):
+			self.view.run_command("ez_motion", { "forward": self.forward })
 
-        if not self.forward:
-            matching_regions.reverse()
 
-        return matching_regions
+	def make_bookmarks(self):
+		""" Creates a list of bookmarks from targets, excess is left in place """
 
-    def get_start_end(self):
-        """ Set the position coords """
+		self.bookmarked = []
+		for i in range(0, len(self.targets)):
+			if (i <= len(self.tags) - 1):
+				self.bookmarked.append(self.targets.pop(0))
 
-        region = self.view.visible_region()
 
-        if (self.forward):
-            self.view.run_command("move", { "extend": False, "word_begin": True, "punct_begin": False, "forward": True, "by": "stops" })
-            start = self.view.sel()[0].a
-            if (start < region.a):
-                start = region.a
-            end = region.b
+	def mark_targets(self):
+		""" Highlights target letters and fades the rest """
 
-        else:
-            end = self.view.sel()[0].a
-            if (end > region.b):
-                end = region.b
-            start = region.a
+		for i, r in enumerate(self.bookmarked):
+			self.view.replace(self.edit, r, self.tags[i])
 
-        return (start, end)
+		for r in (self.targets):
+			self.view.replace(self.edit, r, self.tags[-1])
 
-    def text_fragment(self):
-        """ Determine the region we will use """
+		self.view.add_regions('ez_motion_target', self.bookmarked + self.targets, 'ezmotion.bookmark')
+		self.view.add_regions('ez_motion_fade', self.faded, 'ezmotion.fade')
 
-        return self.view.substr(sublime.Region(self.start, self.end))
+
+	def unmark_targets(self):
+		""" Remove target marks """
+
+		self.view.erase_regions('ez_motion_target')
+		self.view.erase_regions('ez_motion_fade')
+		self.view.end_edit(self.edit)
+		self.window.run_command("undo")
+
+
+	def find_targets(self):
+		""" Find all possible motion targets and return them as a list of sublime.Region objects """
+
+		self.where_am_i()
+
+		text = self.text_fragment()
+
+		for match in re.finditer(r'\w+', text, re.UNICODE):
+			r_start = match.start() + self.start
+			r_end = match.end() + self.start
+			self.targets.append(sublime.Region(r_start, r_start+1))
+			self.faded.append(sublime.Region(r_start+1,r_end))
+
+		if not self.forward:
+			self.targets.reverse()
+			self.faded.reverse()
+
+		if self.in_word:
+			self.targets.pop(0)
+			self.faded.pop(0)
+
+
+	def where_am_i(self):
+		""" Set the position coords and flags for selection and being in word """
+
+		sel = self.view.sel()[0]
+		self.start = sel.a
+		self.end = sel.b
+
+		if (self.start != self.end):
+			self.in_selection = True
+
+		if self.forward and re.match(r'\w', self.view.substr(self.start)) != None:
+			self.in_word = True
+		elif not self.forward and re.match(r'\w', self.view.substr(self.start-1)) != None:
+			self.in_word = True
+
+		region = self.view.visible_region()
+
+		if (self.forward):
+			if (self.start < region.a):
+				self.start = region.a
+			self.end = region.b
+
+		else:
+			if (self.end > region.b):
+				self.end = region.b
+			self.start = region.a
+
+
+	def text_fragment(self):
+		""" Determine the region we will use """
+
+		return self.view.substr(sublime.Region(self.start, self.end))

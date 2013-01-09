@@ -14,6 +14,32 @@ Please add following to your user keymap:
     { "keys": [<keys here>], "command": "ez_motion", "args": {"forward": true } },
     { "keys": [<keys here>], "command": "ez_motion" }
 
+
+On top of that, if you want sexy looks, you should add ezmotion scopes to your colorscheme:
+It's important to set background to something similar, but not same as your actual background (for some reason, ST2 reverts colors if they are the same).
+
+    <dict>
+        <key>scope</key><string>ezmotion.bookmark</string>
+        <key>settings</key>
+        <dict>
+            <key>foreground</key>
+            <string>#ff0000</string>
+            <key>background</key>
+            <string>#1c1b1b</string>
+        </dict>
+    </dict>
+
+    <dict>
+        <key>scope</key><string>ezmotion.fade</string>
+        <key>settings</key>
+        <dict>
+            <key>foreground</key>
+            <string>#857f78</string>
+            <key>background</key>
+            <string>#1c1b1b</string>
+        </dict>
+    </dict>
+
 Info
 ====
 
