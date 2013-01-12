@@ -5,12 +5,12 @@ class EzMotionCommand(sublime_plugin.TextCommand):
 
 	tags = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-	def run(self, edit, forward = False, line = False):
+	def run(self, edit, forward = False, line = False, select = False, next = False):
 
 		self.targets = [];
 		self.faded = [];
-		self.in_selection = False
-		self.in_word = False
+		self.select = select
+		self.next = next
 
 		self.forward = forward
 		self.line = line
@@ -27,21 +27,32 @@ class EzMotionCommand(sublime_plugin.TextCommand):
 	def jump_to_target(self, target):
 		"""	Gets called after successful user input @ input panel """
 
-		try:
-			i = self.tags.index(target)
-		except ValueError:
-			self.unmark_targets()
-			return
-
 		self.unmark_targets()
-
 		edit = self.view.begin_edit()
-		self.view.sel().clear()
-		self.view.sel().add(sublime.Region(self.bookmarked[i].a, self.bookmarked[i].a))
+
+		# if it's the nth run we don't want to clear selections
+		if not self.next:
+			self.view.sel().clear()
+
+		for letter in target:
+			try:
+				i = self.tags.index(letter)
+				if not self.select:
+					self.view.sel().add(sublime.Region(self.bookmarked[i].a, self.bookmarked[i].a))
+				else:
+					self.view.sel().add(sublime.Region(self.sel.a, self.bookmarked[i].a))
+
+			except ValueError:
+				self.unmark_targets()
+				return
+
 		self.view.end_edit(edit)
 
 		if ((i == len(self.tags) - 1) and (len(self.targets))):
-			self.view.run_command("ez_motion", { "forward": self.forward })
+			# if user has selected targets besides 'Z' or is in selection
+			if len(target) > 1 or self.select:
+				self.next = True
+			self.view.run_command("ez_motion", { "forward": self.forward, "next": self.next, "select": self.select })
 
 
 	def make_bookmarks(self):
@@ -92,28 +103,27 @@ class EzMotionCommand(sublime_plugin.TextCommand):
 			self.targets.reverse()
 			self.faded.reverse()
 
-		if self.in_word:
+		if self.in_word():
 			self.targets.pop(0)
 			self.faded.pop(0)
 
 
 	def where_am_i(self):
-		""" Set the position coords and flags for selection and being in word """
+		""" Set the position coords """
 
-		sel = self.view.sel()[0]
-		self.start = sel.a
-		self.end = sel.b
+		# on nth run our start should be relative to last caret/selection
+		self.sel = self.view.sel()[-1] if self.next else self.view.sel()[0]
 
-		if (self.start != self.end):
-			self.in_selection = True
+		self.start = self.sel.a
+		self.end = self.sel.b
 
-		if self.forward and re.match(r'\w', self.view.substr(self.start)) != None:
-			self.in_word = True
-		elif not self.forward and re.match(r'\w', self.view.substr(self.start-1)) != None:
-			self.in_word = True
+		if self.select and self.forward:
+			# on nth run within selection, we want to start marking from end
+			self.start = self.end
 
 		region = self.view.visible_region()
 
+		# we rely on visible region if cursor/selection is somewhere else
 		if (self.forward):
 			if (self.start < region.a):
 				self.start = region.a
@@ -125,7 +135,18 @@ class EzMotionCommand(sublime_plugin.TextCommand):
 			self.start = region.a
 
 
+	def in_word(self):
+		""" Set a flag if caret is in or near word """
+
+		if self.forward and re.match(r'\w', self.view.substr(self.start)) != None:
+			return True
+		elif not self.forward and re.match(r'\w', self.view.substr(self.start-1)) != None:
+			return True
+
+		return False
+
+
 	def text_fragment(self):
-		""" Determine the region we will use """
+		""" Returns text fragment we will be working with """
 
 		return self.view.substr(sublime.Region(self.start, self.end))
